@@ -1,0 +1,9 @@
+gwen:
+    core:       4bc4c59
+    net80211:   ea312e8
+    pp:         01980e2
+    smartconfig:01980e2
+    wpa:        01980e2
+    espnow:     01980e2
+    wps:        01980e2
+    phy:	1055_8
