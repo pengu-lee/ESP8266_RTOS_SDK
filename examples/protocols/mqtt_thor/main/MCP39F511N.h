@@ -184,8 +184,8 @@ typedef struct system_cfg_reg_t
 
 void mcp_init(void);
 // void saveToFlash();
-void autoCalibrateGain(enum MCPChannel ch);
-void autoCalibrateQGain(enum MCPChannel ch);
+void autoCalibrateGain();
+void autoCalibrateQGain();
 void autoCalibrateFreq();
 
 void readPower();

@@ -12,9 +12,6 @@
 #define highByte(x) ((x >> 8) & 0xFF)
 #define lowByte(x) (x & 0xFF)
 
-#define BUF_SIZE (1024) // UART buffer size
-
-
 uint8_t _msg_buffer[MCP_BUFFER_LEN];
 uint8_t _buf_count;
 uint8_t _rx_status;
@@ -64,6 +61,9 @@ uint8_t _precisionPower1 = 3;
 uint8_t _precisionAmps2 = 3;
 uint8_t _precisionPower2 = 3;
 
+/**
+ * Default target value for Voltage, Frequency, Current and power
+ */
 uint16_t _caliVolts = 1100; // 110.0 V
 uint16_t _caliFreq = 60000; // 60.000 Hz  Resolutin: 1mHz
 
@@ -118,6 +118,16 @@ void _setAddressPointer(uint16_t addr);
 uint8_t _registerWrite(uint16_t addr, uint8_t const *data, uint8_t len);
 
 /**
+ * @brief      Reads bytes.
+ *
+ * @param[in]  addr  The address of register
+ * @param[in]  len   The length of data to read from
+ *
+ * @return     success or not
+ */
+uint8_t _readBytes(uint16_t addr, uint8_t len);
+
+/**
  * @brief      Read data from mcp39f511n register
  * 
  *              Data Frame:
@@ -135,6 +145,15 @@ uint8_t _registerWrite(uint16_t addr, uint8_t const *data, uint8_t len);
 void _registerRead(uint8_t numBytes);
 
 /**
+ * @brief      Receive response from mcp39f511n
+ *
+ * @param[in]  cmd   The Command ID
+ *
+ * @return     success or not
+ */
+uint8_t _receiveResponse(uint8_t cmd);
+
+/**
  * @brief      Makes a copy of all the calibration and configuration registers to flash
  *
  * @return     success or not
@@ -147,9 +166,14 @@ uint8_t _set_rx_status(uint8_t status);
 
 uint8_t _processBuffer(uint8_t cmd);
 void _clearBuffer();
-uint8_t _receiveResponse(uint8_t cmd);
-uint8_t _readBytes(uint16_t addr, uint8_t len);
 
+/**
+ * @brief      Reads an unsigned int from _msg_buffer after _readBytes
+ *
+ * @param[in]  addr  The offset of register
+ *
+ * @return     combined data
+ */
 uint16_t read_int(uint8_t addr);
 uint32_t read_long(uint8_t addr);
 uint64_t read_long_long(uint8_t addr);
@@ -166,7 +190,7 @@ void mcp_init(void)
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
     uart_param_config(MCP_UART_NUM, &uart_config);
-    uart_driver_install(MCP_UART_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 0, NULL);
+    uart_driver_install(MCP_UART_NUM, MCP_BUFFER_LEN, MCP_BUFFER_LEN, 0, NULL);
 
     _rx_status = 0;
     _buf_count = 0;
@@ -199,14 +223,40 @@ void mcp_init(void)
     //   DEBUG_PRINT(("\n_saveToFlash done!!\n"));
 }
 
-void autoCalibrateGain(enum MCPChannel ch)
+void autoCalibrateGain()
 {
+    uint8_t targetVolt[] = {lowByte(_caliVolts), highByte(_caliVolts)};
+    uint8_t targetAmpWatt[] = {lowByte(_caliAmps1), highByte(_caliAmps1),
+                                lowByte(_caliWatt1), highByte(_caliWatt1)};
+    // Writing target value to the specific register
+    _registerWrite(MCP_REG_CALI_VOLTS, targetVolt, sizeof(targetVolt));
+    _registerWrite(MCP_REG_CALI_AMPS1, targetAmpWatt, sizeof(targetAmpWatt));
+    _registerWrite(MCP_REG_CALI_AMPS2, targetAmpWatt, sizeof(targetAmpWatt));
 
+    // Fulfill Auto-Calibrate Gain command frame
+    _start_tx_frame();
+    _buf_append(MCP_CMD_AUTO_CALIBRATE_GAIN);
+    _buf_append(BOTH);
+    _complete_tx_frame();
+    if(_receiveResponse(MCP_CMD_AUTO_CALIBRATE_GAIN) == MCP_STATUS_RX_COMPLETE)
+    {
+        DEBUG_PRINT(("autoCalibrateGain complete!\n"));
+        return;
+    }
 }
 
 void autoCalibrateFreq()
 {
+    uint8_t target[] = {lowByte(_caliFreq), highByte(_caliFreq)};
 
+    if(_registerWrite(MCP_REG_CALI_FREQUENCY, target, sizeof(target)) != MCP_STATUS_RX_COMPLETE)
+    {
+        DEBUG_PRINT(("write frequency target failed.\n"));
+        return;
+    }
+    else
+        if(_saveToFlash() == MCP_STATUS_RX_COMPLETE)
+            DEBUG_PRINT(("autoCalibrateFreq Done!\n\n"));
 }
 
 
